@@ -4,11 +4,15 @@ using System.Threading.Tasks;
 using System.Collections.Generic;
 using LibGit2Sharp;
 using System.IO;
+using CppAst;
 
 namespace libvlc_diff
 {
     class Program
     {
+        const string libvlcHeader = "libvlc.h";
+        const string vlc = "vlc";
+        const string include = "include";
         const string libvlc4 = "vlc";
         const string libvlc3 = "vlc-3.0";
         const string LibVLC4URL = "https://github.com/videolan/vlc";
@@ -46,38 +50,32 @@ namespace libvlc_diff
 
         private static async Task RunOptions(Options cliOptions)
         {
-            //TODO: check if clones already exist.
+            //TODO: check if clones already exist and if we want to use it.
             //TODO: check and log clone progress
             var vlc4Dir = Path.Combine(Directory.GetCurrentDirectory(), libvlc4);
             var vlc3 = Path.Combine(Directory.GetCurrentDirectory(), libvlc3);
+            var clone = false;
 
-            if(Directory.Exists(vlc4Dir))
-                Directory.Delete(vlc4Dir, true);
-
-            var cloneOptions = new CloneOptions
+            if (clone)
             {
-                OnTransferProgress = progress => { Write($"{progress.ReceivedBytes}/{progress.TotalObjects}"); return true; }
-            };
+                if (Directory.Exists(vlc4Dir))
+                    Directory.Delete(vlc4Dir, true);
 
-            var vlc4Repo = Repository.Clone("https://code.videolan.org/videolan/vlc.git", vlc4Dir, cloneOptions);
-            using (var vlc4 = new Repository(vlc4Repo))
-            {
+                var cloneOptions = new CloneOptions
+                {
+                    OnTransferProgress = progress => { WriteLine($"{progress.ReceivedBytes}/{progress.TotalObjects}"); return true; }
+                };
 
+                var vlc4Repo = Repository.Clone("https://code.videolan.org/videolan/vlc.git", vlc4Dir, cloneOptions);
+                using var vlc4 = new Repository(vlc4Repo);
+                // TODO: checkout specific commit
             }
-            //var repoPath = Repository.Clone(lvs, Path.Combine(Directory.GetCurrentDirectory(), libvlc4), new CloneOptions
-            //{
-            //    //OnTransferProgress = _ => { return true; },
-            //    BranchName = "master",
-            //    Checkout = true,
-            //    //OnProgress = progress => { WriteLine(progress); return true; },
-            //    //OnUpdateTips = (name, oldId, newId) => { updateTipsWasCalled = true; return true; },
-            //    //OnCheckoutProgress = (a, b, c) => checkoutWasCalled = true
-            //});
 
-            //var repo = new Repository(repoPath);
 
-            //WriteLine(repo);
-            //Repository.Clone(LibVLC3URL, Path.Combine(Directory.GetCurrentDirectory(), libvlc3));
+            var exampleFile = Path.Combine(vlc4Dir, include, vlc, libvlcHeader);
+            var r = CppParser.ParseFile(exampleFile);
+
+
 
         }
     }
