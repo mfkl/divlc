@@ -32,7 +32,7 @@ namespace divlc
                 , HelpText = "The hash of the libvlc 3 version to compare.")]
             public string LibVLC3Hash { get; set; } = "3f633b2777a1ce2e41e9869cb49992960294369b";
 
-            [Option("noclone", Required = true, HelpText = "Do not clone, use the provided local git repositories.")]
+            [Option("noclone", Required = false, HelpText = "Do not clone, use the provided local git repositories.")]
             public bool NoClone { get; set; }
         }
 
@@ -50,7 +50,7 @@ namespace divlc
 
         private static async Task RunOptions(Options cliOptions)
         {
-            SetupGitRepositories(cliOptions);
+      /*      SetupGitRepositories(cliOptions);*/
 
             var exampleFile = Path.Combine(vlc3Dir, include, vlc, libvlcHeader);
             var exampleFile2 = Path.Combine(vlc4Dir, include, vlc, libvlcHeader);
@@ -58,8 +58,9 @@ namespace divlc
             var r2 = CppParser.ParseFile(exampleFile2);
 
 
-
-
+            // use mono.cecil to compare objects
+            // diff: https://github.com/unoplatform/Uno.PackageDiff/blob/master/src/Uno.PackageDiff/AssemblyComparer.cs
+            // report: https://github.com/unoplatform/Uno.PackageDiff/blob/master/src/Uno.PackageDiff/ReportAnalyzer.cs
         }
 
         static void SetupGitRepositories(Options cliOptions)
