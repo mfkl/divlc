@@ -6,7 +6,7 @@ using LibGit2Sharp;
 using System.IO;
 using CppAst;
 
-namespace libvlc_diff
+namespace divlc
 {
     class Program
     {
