@@ -83,9 +83,7 @@ namespace divlc
 
         private static async Task RunOptions(Options cliOptions)
         {
-            /*      SetupGitRepositories(cliOptions);*/
-            // libvlc 3
-
+            SetupGitRepositories(cliOptions);
 
             var vlc3files = GetFilesToParse(vlc3Dir, cliOptions);
             var vlc4files = GetFilesToParse(vlc4Dir, cliOptions);
@@ -96,20 +94,6 @@ namespace divlc
                 ParseComments = cliOptions.NoComment
             };
 
-            var media = BuildPath(vlc3Dir, libvlcMedia);
-            var lines = File.ReadAllText(media);
-            if (lines[0] == '/')
-            {
-                const string patch = @"#include <limits.h>
-#include <stddef.h>
-#if SIZE_MAX == UINT_MAX
-typedef int ssize_t;        /* common 32 bit case */
-#elif SIZE_MAX == ULLONG_MAX
-typedef long long ssize_t;  /* windows 64 bits */
-#endif
-                    ";
-                File.WriteAllText(media, patch + lines);
-            }
 
 
             parserOptions.IncludeFolders.Add(Path.Combine(vlc3Dir, include));
@@ -164,25 +148,46 @@ typedef long long ssize_t;  /* windows 64 bits */
         {
             //TODO: check if clones already exist and if we want to use it.
             //TODO: check and log clone progress
-            if (!cliOptions.NoClone)
+           /* if (!cliOptions.NoClone)
             {
                 if (Directory.Exists(vlc4Dir))
                     Directory.Delete(vlc4Dir, true);
                 if (Directory.Exists(vlc3Dir))
                     Directory.Delete(vlc3Dir, true);
 
-               /* var cloneOptions = new CloneOptions
+               *//* var cloneOptions = new CloneOptions
                 {
                     OnTransferProgress = progress => { WriteLine($"{progress.ReceivedBytes}/{progress.TotalObjects}"); return true; }
-                };*/
+                };*//*
 
                 var vlc4Repo = Repository.Clone(LibVLC4URL, vlc4Dir);
                 var vlc3Repo = Repository.Clone(LibVLC3URL, vlc3Dir);
+                using var vlc3 = new Repository(vlc3Repo);
+
                 using var vlc4 = new Repository(vlc4Repo);
                 // TODO: checkout specific commit
-            }
+            }*/
+
+            PatchFilesIfNeeded(vlc3Dir);
+            PatchFilesIfNeeded(vlc4Dir);
         }
 
+        private static void PatchFilesIfNeeded(string vlcDir)
+        {
+            var media = BuildPath(vlcDir, libvlcMedia);
+            var lines = File.ReadAllText(media);
 
+            if (lines[0] == '/') // first char of the non patched file.
+            {
+                const string patch = @"#include <limits.h>
+#include <stddef.h>
+#if SIZE_MAX == UINT_MAX
+typedef int ssize_t;        /* common 32 bit case */
+#elif SIZE_MAX == ULLONG_MAX
+typedef long long ssize_t;  /* windows 64 bits */
+#endif";
+                File.WriteAllText(media, patch + lines);
+            }
+        }
     }
 }
