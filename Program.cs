@@ -90,10 +90,31 @@ namespace divlc
             var vlc3files = GetFilesToParse(vlc3Dir, cliOptions);
             var vlc4files = GetFilesToParse(vlc4Dir, cliOptions);
 
-            var parserOptions = new CppParserOptions { ParseComments = cliOptions.NoComment, ParseMacros = true };
+
+            var parserOptions = new CppParserOptions
+            {
+                ParseComments = cliOptions.NoComment
+            };
+
+            var media = BuildPath(vlc3Dir, libvlcMedia);
+            var lines = File.ReadAllText(media);
+            if (lines[0] == '/')
+            {
+                const string patch = @"#include <limits.h>
+#include <stddef.h>
+#if SIZE_MAX == UINT_MAX
+typedef int ssize_t;        /* common 32 bit case */
+#elif SIZE_MAX == ULLONG_MAX
+typedef long long ssize_t;  /* windows 64 bits */
+#endif
+                    ";
+                File.WriteAllText(media, patch + lines);
+            }
+
+
             parserOptions.IncludeFolders.Add(Path.Combine(vlc3Dir, include));
 
-            var r = CppParser.ParseFiles(vlc3files, parserOptions);
+            var r = CppParser.ParseFile(BuildPath(vlc3Dir, vlch), parserOptions);
 
             var r2 = CppParser.ParseFiles(vlc4files, new CppParserOptions
             {
