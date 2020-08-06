@@ -34,6 +34,8 @@ namespace divlc
         static string vlc4Dir = Path.Combine(Directory.GetCurrentDirectory(), libvlc4);
         static string vlc3Dir = Path.Combine(Directory.GetCurrentDirectory(), libvlc3);
 
+        static bool NoComment;
+
         public class Options
         {
             [Option('v', "verbose", Required = false, HelpText = "Set output to verbose messages.")]
@@ -47,14 +49,18 @@ namespace divlc
             public string LibVLC3Hash { get; set; } = "3f633b2777a1ce2e41e9869cb49992960294369b";
 
             [Option("no-clone", Required = false, HelpText = "Do not clone, use the provided local git repositories.")]
-            public bool NoClone { get; set; }
+            public bool NoClone { get; set; } = true; // TODO: change default to false
 
             [Option("files", Required = false, HelpText = "Comma separated list of libvlc header files to include:" +
                 " Defaults to all")]
             public string Files { get; set; }
 
             [Option("no-comment", Required = false, HelpText = "Do not include comments/documentation in the comparison. Defaults to false")]
-            public bool NoComment { get; set; }
+            public bool NoComment { get; set; } = false;
+
+            [Option("deprecated", Required = false, HelpText = "Whether to include deprecated functions in the comparison. Defaults to false")]
+            public bool Deprecated { get; set; } = false;
+
         }
 
         static async Task Main(string[] args)
@@ -83,30 +89,20 @@ namespace divlc
 
         private static async Task RunOptions(Options cliOptions)
         {
+            NoComment = cliOptions.NoComment;
+
             SetupGitRepositories(cliOptions);
 
-            var vlc3files = GetFilesToParse(vlc3Dir, cliOptions);
-            var vlc4files = GetFilesToParse(vlc4Dir, cliOptions);
+            var parsedv3 = Parse(vlc3Dir);
+            var func = parsedv3.Functions.Except(parsedv3.Functions.Where(f
+                => f.Comment != null && f.Comment.ChildrenToString().Contains("deprecated"))).ToList();
 
-
-            var parserOptions = new CppParserOptions
+            foreach(var fu in func)
             {
-                ParseComments = cliOptions.NoComment
-            };
+                WriteLine(fu.Name);
+            }
 
-
-
-            parserOptions.IncludeFolders.Add(Path.Combine(vlc3Dir, include));
-
-            var r = CppParser.ParseFile(BuildPath(vlc3Dir, vlch), parserOptions);
-
-            var r2 = CppParser.ParseFiles(vlc4files, new CppParserOptions
-            {
-
-                ParseAsCpp = false,
-                ParseComments = cliOptions.NoComment
-            });
-
+            var parsedv4 = Parse(vlc4Dir);
 
 
             // use mono.cecil to compare objects
@@ -114,62 +110,40 @@ namespace divlc
             // report: https://github.com/unoplatform/Uno.PackageDiff/blob/master/src/Uno.PackageDiff/ReportAnalyzer.cs
         }
 
-        static List<string> GetFilesToParse(string vlcDir, Options cliOptions)
-        {
-            var paths = new List<string>();
-
-            if (!string.IsNullOrEmpty(cliOptions.Files))
-            {
-                var files = cliOptions.Files.Split(',');
-                foreach(var file in files)
-                {
-                    paths.Add(BuildPath(vlcDir, file));
-                }
-                return paths;
-            }
-
-          /*  paths.Add(BuildPath(vlcDir, libvlc));
-            paths.Add(BuildPath(vlcDir, libvlcDialog));
-            paths.Add(BuildPath(vlcDir, libvlcEvents));
-            paths.Add(BuildPath(vlcDir, libvlcMedia));
-            paths.Add(BuildPath(vlcDir, libvlcMediaDiscoverer));
-            paths.Add(BuildPath(vlcDir, libvlcMediaLibrary));
-            paths.Add(BuildPath(vlcDir, libvlcMediaList));
-            paths.Add(BuildPath(vlcDir, libvlcMediaListPlayer));
-            paths.Add(BuildPath(vlcDir, libvlcMediaPlayer));
-            paths.Add(BuildPath(vlcDir, libvlcRendererDiscoverer));
-            paths.Add(BuildPath(vlcDir, libvlcVlm));*/
-            paths.Add(BuildPath(vlcDir, vlch));
-
-            return paths;
-        }
-
         static void SetupGitRepositories(Options cliOptions)
         {
             //TODO: check if clones already exist and if we want to use it.
             //TODO: check and log clone progress
-           /* if (!cliOptions.NoClone)
+            if (!cliOptions.NoClone)
             {
                 if (Directory.Exists(vlc4Dir))
                     Directory.Delete(vlc4Dir, true);
                 if (Directory.Exists(vlc3Dir))
                     Directory.Delete(vlc3Dir, true);
 
-               *//* var cloneOptions = new CloneOptions
+                // TODO: fix clone options display for both clones
+                // TODO: clone in parallel
+                var cloneOptions = new CloneOptions
                 {
                     OnTransferProgress = progress => { WriteLine($"{progress.ReceivedBytes}/{progress.TotalObjects}"); return true; }
-                };*//*
+                };
 
-                var vlc4Repo = Repository.Clone(LibVLC4URL, vlc4Dir);
-                var vlc3Repo = Repository.Clone(LibVLC3URL, vlc3Dir);
-                using var vlc3 = new Repository(vlc3Repo);
+                Repository.Clone(LibVLC4URL, vlc4Dir, cloneOptions);
+                Repository.Clone(LibVLC3URL, vlc3Dir, cloneOptions);
+            }
 
-                using var vlc4 = new Repository(vlc4Repo);
-                // TODO: checkout specific commit
-            }*/
+            CheckoutHash(vlc3Dir, cliOptions.LibVLC3Hash);
+            CheckoutHash(vlc4Dir, cliOptions.LibVLC4Hash);
 
             PatchFilesIfNeeded(vlc3Dir);
             PatchFilesIfNeeded(vlc4Dir);
+        }
+
+        private static void CheckoutHash(string vlc, string hash)
+        {
+            using var vlcRepo = new Repository(vlc);
+            var localCommit = vlcRepo.Lookup<Commit>(hash);
+            Commands.Checkout(vlcRepo, localCommit);
         }
 
         private static void PatchFilesIfNeeded(string vlcDir)
@@ -188,6 +162,17 @@ typedef long long ssize_t;  /* windows 64 bits */
 #endif";
                 File.WriteAllText(media, patch + lines);
             }
+        }
+
+        private static CppCompilation Parse(string vlcDir)
+        {
+            var parserOptions = new CppParserOptions
+            {
+                ParseComments = NoComment
+            };
+
+            parserOptions.IncludeFolders.Add(Path.Combine(vlcDir, include));
+            return CppParser.ParseFile(BuildPath(vlcDir, vlch), parserOptions);
         }
     }
 }
