@@ -224,21 +224,19 @@ namespace divlc
                 WriteLine($"{structName} {nameof(fields1)} count is {fields1.Count} in libvlc 3");
                 WriteLine($"{structName} {nameof(fields1)} count is {fields2.Count} in libvlc 4");
             }
-            // select all fields that have the same name, compare them.
-            // select all fields that are unique to either sequence, print them...
-            var f1inf2 = from first in fields1
-                                       join second in fields2
-                                       on first.Name equals second.Name
-                                       select first;
 
             foreach(var item in fields1.Where(f1 => !fields2.Any(f2 => f2.Name == f1.Name)))
             {
                 WriteLine($"item {item.Name} is missing from v2");
                 // item missing in v2
             }
-            foreach (var item in fields1.Where(f1 => fields2.Any(f2 => f2.Name == f1.Name)))
+
+            var union1 = fields1.FirstOrDefault(f1 => f1.Name == "u");
+            var union2 = fields2.FirstOrDefault(f2 => f2.Name == "u");
+
+            if(union1 != null && union2 != null)
             {
-                
+                CompareEventsUnion(union1, union2);
             }
 
             foreach (var item in fields2.Where(f2 => !fields1.Any(f1 => f1.Name == f2.Name)))
@@ -247,35 +245,42 @@ namespace divlc
                 WriteLine($"item {item.Name} is missing from v1");
             }
 
-
-
-
             //fields1.Where(s => s.Name)
             // type, name, visibility, comment
-            for (var i = 0; i < fields1.Count; i++)
-            {
-                var f1 = fields1[i];
-                var f2 = fields2[i];
-            //    if(f1.Type == )
-                if (f1.Type.GetDisplayName() != f2.Type.GetDisplayName())
-                    WriteLine($"{nameof(f1.Type)} {f1.Type.GetDisplayName()} is different than {f2.Type.GetDisplayName()}");
-                if(f1.Name != f2.Name)
-                    WriteLine($"{nameof(f1.Name)} {f1.Name} is different than {f2.Name}");
-                if(f1.Visibility != f2.Visibility)
-                    WriteLine($"{nameof(f1.Visibility)} {f1.Visibility} is different than {f2.Visibility}");
-                if(f1.Comment?.ChildrenToString() != f2.Comment?.ChildrenToString())
-                    WriteLine($"{nameof(f1.Comment)} {f1.Comment?.ChildrenToString()} is different than {f2.Comment?.ChildrenToString()}");
-            }
-            //foreach(var f1 in fields1)
+            //for (var i = 0; i < fields1.Count; i++)
             //{
-            //    foreach(var f2 in fields2)
-            //    {
-            //        if (f1.Type != f2.Type)
-            //            WriteLine($"{nameof(f1.Type)} {f1.Type} is different than {f2.Type}");
-            //    }
+            //    var f1 = fields1[i];
+            //    var f2 = fields2[i];
+            ////    if(f1.Type == )
+            //    if (f1.Type.GetDisplayName() != f2.Type.GetDisplayName())
+            //        WriteLine($"{nameof(f1.Type)} {f1.Type.GetDisplayName()} is different than {f2.Type.GetDisplayName()}");
+            //    if(f1.Name != f2.Name)
+            //        WriteLine($"{nameof(f1.Name)} {f1.Name} is different than {f2.Name}");
+            //    if(f1.Visibility != f2.Visibility)
+            //        WriteLine($"{nameof(f1.Visibility)} {f1.Visibility} is different than {f2.Visibility}");
+            //    if(f1.Comment?.ChildrenToString() != f2.Comment?.ChildrenToString())
+            //        WriteLine($"{nameof(f1.Comment)} {f1.Comment?.ChildrenToString()} is different than {f2.Comment?.ChildrenToString()}");
             //}
 
+        }
 
+        private static void CompareEventsUnion(CppField union1, CppField union2)
+        {
+            var c1 = (CppClass)union1.Type;
+            var c2 = (CppClass)union2.Type;
+            var r1 = c1.Fields.Where(t1 => !c2.Fields.Any(t2 => t1.Name == t2.Name)).ToList(); // in v1 but not in v2
+            var r2 = c2.Fields.Where(t2 => !c1.Fields.Any(t1 => t2.Name == t1.Name)).ToList(); // in v2 but not in v1
+
+            WriteLine("Events change");
+            WriteLine(Environment.NewLine);
+            WriteLine("fields in v1 but not v2:");
+            foreach(var r in r1)
+                WriteLine(r.Name);
+
+            WriteLine(Environment.NewLine);
+            WriteLine("fields in v2 but not in v1:");
+            foreach (var r in r2)
+                WriteLine(r.Name);
         }
 
         static void SetupGitRepositories(Options cliOptions)
