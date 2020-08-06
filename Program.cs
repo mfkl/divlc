@@ -7,6 +7,7 @@ using System.IO;
 using CppAst;
 using System;
 using System.Linq;
+using System.Net.Http;
 
 namespace divlc
 {
@@ -31,6 +32,7 @@ namespace divlc
         const string libvlc3 = "vlc-3.0";
         const string LibVLC4URL = "https://github.com/videolan/vlc";
         const string LibVLC3URL = "https://github.com/videolan/vlc-3.0";
+
         static string vlc4Dir = Path.Combine(Directory.GetCurrentDirectory(), libvlc4);
         static string vlc3Dir = Path.Combine(Directory.GetCurrentDirectory(), libvlc3);
 
@@ -94,20 +96,186 @@ namespace divlc
             SetupGitRepositories(cliOptions);
 
             var parsedv3 = Parse(vlc3Dir);
-            var func = parsedv3.Functions.Except(parsedv3.Functions.Where(f
-                => f.Comment != null && f.Comment.ChildrenToString().Contains("deprecated"))).ToList();
-
-            foreach(var fu in func)
-            {
-                WriteLine(fu.Name);
-            }
 
             var parsedv4 = Parse(vlc4Dir);
 
+            Diff(parsedv3, parsedv4);
+
+            //var func = parsedv3.Functions.Except(parsedv3.Functions.Where(f
+            //    => f.Comment != null && f.Comment.ChildrenToString().Contains("deprecated"))).ToList();
+
+            //foreach(var fu in func)
+            //{
+            //    WriteLine(fu.Name);
+            //}
+
+
+            var func = parsedv4.Functions.Except(parsedv4.Functions.Where(f
+                => f.Comment != null && f.Comment.ChildrenToString().Contains("deprecated"))).ToList();
+
+            string l = null;
+            List<string> symbs = new List<string>();
+            foreach (var fu in func)
+            {
+                l = l + fu.Name + Environment.NewLine;
+                symbs.Add(fu.Name);
+            }
+
+
+            //using var httpClient = new HttpClient();
+            //var libvlcSymbols = (await httpClient.GetStringAsync(LibVLCSymURL)).Split(new[] { '\r', '\n' }).Where(s => !string.IsNullOrEmpty(s)).ToList();
+
+            //foreach(var s in libvlcSymbols)
+            //{
+            //    if(!symbs.Contains(s))
+            //    {
+
+            //    }
+            //}
+            //var libvlcdeprecatedSym = (await httpClient.GetStringAsync(LibVLCDeprecatedSymUrl)).Split(new[] { '\r', '\n' }).Where(s => !string.IsNullOrEmpty(s)).ToList();
 
             // use mono.cecil to compare objects
             // diff: https://github.com/unoplatform/Uno.PackageDiff/blob/master/src/Uno.PackageDiff/AssemblyComparer.cs
             // report: https://github.com/unoplatform/Uno.PackageDiff/blob/master/src/Uno.PackageDiff/ReportAnalyzer.cs
+        }
+
+        private static void Diff(CppCompilation parsedv3, CppCompilation parsedv4)
+        {
+            CompareStructs(parsedv3.Classes, parsedv4.Classes);
+        }
+
+        private static void CompareStructs(CppContainerList<CppClass> structsv3, CppContainerList<CppClass> structsv4)
+        {
+            WriteLine($"LibVLC 3 has {structsv3.Count} structs");
+            WriteLine($"LibVLC 4 has {structsv4.Count} structs");
+
+            List<CppClass> v3structMissingFromv4 = new List<CppClass>();
+            List<CppClass> v4structMissingFromv3 = new List<CppClass>();
+            List<StructDiff> structDiffs = new List<StructDiff>();
+
+            foreach (var s in structsv3)
+            {
+                var match = structsv4.FirstOrDefault(ss => ss.Name == s.Name);
+                if(match == null)
+                {
+                    v3structMissingFromv4.Add(s);
+                    continue;
+                }
+
+                if (match.SizeOf != s.SizeOf)
+                {
+                    ForegroundColor = ConsoleColor.Red;
+                    WriteLine($"{match.Name} size is {s.SizeOf} in libvlc 3 and {match.SizeOf} in libvlc 4");
+                }
+
+                CompareStructFields(s.Name, s.Fields, match.Fields);
+                //var diff = !match.Comment?.ChildrenToString()?.Equals(s.Comment?.ChildrenToString());
+                //if (diff.HasValue && !diff.Value && (match.Comment != null && s.Comment != null)) continue;
+
+                structDiffs.Add(new StructDiff
+                {
+                    Name = s.Name,
+                    Commentv3 = s.Comment?.ChildrenToString(),
+                    Commentv4 = match.Comment?.ChildrenToString()
+                });
+
+            }
+
+            foreach (var s in structsv4)
+            {
+                var match = structsv3.FirstOrDefault(ss => ss.Name == s.Name);
+                if (match == null)
+                {
+                    ForegroundColor = ConsoleColor.Red;
+                    v4structMissingFromv3.Add(s);
+                    continue;
+                }
+
+                if (match.Comment == null && s.Comment == null) continue;
+                if (match.Comment == null || s.Comment == null)
+                {
+                    ForegroundColor = ConsoleColor.Red;
+                    WriteLine($"Comment changed for {s.Name}");
+                    if (match.Comment == null)
+                        WriteLine($"{match.Name} has no more documentation");
+                    else WriteLine($"{s.Name} has no more documentation");
+                    continue;
+                }
+                if (!match.Comment.ChildrenToString().Equals(s.Comment.ChildrenToString()))
+                {
+                    ForegroundColor = ConsoleColor.Red;
+                    WriteLine($"Comment changed for {s.Name}");
+                    WriteLine($"LibVLC 4: {s.Comment.ChildrenToString()}");
+                    WriteLine($"LibVLC 3: {match.Comment.ChildrenToString()}");
+                }
+            }
+
+
+        }
+
+        private static void CompareStructFields(string structName, CppContainerList<CppField> fields1,
+            CppContainerList<CppField> fields2)
+        {
+            if (fields1.Count == 0 && fields2.Count == 0) return;
+
+            if (fields1.Count != fields2.Count)
+            {
+                ForegroundColor = ConsoleColor.Red;
+                WriteLine($"{structName} {nameof(fields1)} count is {fields1.Count} in libvlc 3");
+                WriteLine($"{structName} {nameof(fields1)} count is {fields2.Count} in libvlc 4");
+            }
+            // select all fields that have the same name, compare them.
+            // select all fields that are unique to either sequence, print them...
+            var f1inf2 = from first in fields1
+                                       join second in fields2
+                                       on first.Name equals second.Name
+                                       select first;
+
+            foreach(var item in fields1.Where(f1 => !fields2.Any(f2 => f2.Name == f1.Name)))
+            {
+                WriteLine($"item {item.Name} is missing from v2");
+                // item missing in v2
+            }
+            foreach (var item in fields1.Where(f1 => fields2.Any(f2 => f2.Name == f1.Name)))
+            {
+                
+            }
+
+            foreach (var item in fields2.Where(f2 => !fields1.Any(f1 => f1.Name == f2.Name)))
+            {
+                // item missing in v1
+                WriteLine($"item {item.Name} is missing from v1");
+            }
+
+
+
+
+            //fields1.Where(s => s.Name)
+            // type, name, visibility, comment
+            for (var i = 0; i < fields1.Count; i++)
+            {
+                var f1 = fields1[i];
+                var f2 = fields2[i];
+            //    if(f1.Type == )
+                if (f1.Type.GetDisplayName() != f2.Type.GetDisplayName())
+                    WriteLine($"{nameof(f1.Type)} {f1.Type.GetDisplayName()} is different than {f2.Type.GetDisplayName()}");
+                if(f1.Name != f2.Name)
+                    WriteLine($"{nameof(f1.Name)} {f1.Name} is different than {f2.Name}");
+                if(f1.Visibility != f2.Visibility)
+                    WriteLine($"{nameof(f1.Visibility)} {f1.Visibility} is different than {f2.Visibility}");
+                if(f1.Comment?.ChildrenToString() != f2.Comment?.ChildrenToString())
+                    WriteLine($"{nameof(f1.Comment)} {f1.Comment?.ChildrenToString()} is different than {f2.Comment?.ChildrenToString()}");
+            }
+            //foreach(var f1 in fields1)
+            //{
+            //    foreach(var f2 in fields2)
+            //    {
+            //        if (f1.Type != f2.Type)
+            //            WriteLine($"{nameof(f1.Type)} {f1.Type} is different than {f2.Type}");
+            //    }
+            //}
+
+
         }
 
         static void SetupGitRepositories(Options cliOptions)
