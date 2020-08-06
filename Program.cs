@@ -142,6 +142,40 @@ namespace divlc
         private static void Diff(CppCompilation parsedv3, CppCompilation parsedv4)
         {
             CompareStructs(parsedv3.Classes, parsedv4.Classes);
+
+            CompareFuncs(parsedv3.Functions, parsedv4.Functions);
+        }
+
+        private static void CompareFuncs(CppContainerList<CppFunction> functions1, CppContainerList<CppFunction> functions2)
+        {
+            WriteLine(Environment.NewLine);
+
+            ForegroundColor = ConsoleColor.Yellow;
+
+            //TODO: Add deprecated option.
+            var f1 = functions1.Except(functions1.Where(f => f.Span.Start.File.Contains("deprecated")));
+
+            var f2 = functions2.Except(functions2.Where(f => f.Span.Start.File.Contains("deprecated")));
+
+            if (f1.Count() != f2.Count())
+                System.Diagnostics.Debug.WriteLine($"function count is different. v1 has {f1.Count()}, v2 has {f2.Count()}");
+
+            foreach (var function in f1.Where(f1 => !f2.Any(f2 => f2.Name == f1.Name)))
+            {
+                // functions in v1, not in v2
+                System.Diagnostics.Debug.WriteLine($"function {function.Name} was removed from libvlc 4");
+            }
+
+            ForegroundColor = ConsoleColor.Green;
+
+            foreach (var function in f2.Where(f2 => !f1.Any(f1 => f1.Name == f2.Name)))
+            {
+                // functions in v2, not in v1
+                System.Diagnostics.Debug.WriteLine($"function {function.Name} was added in libvlc 4");
+            }
+            // functions in v2, not in v1
+
+            // for same functions, check return parameter, parameter count, parameter order, parameter type, parameter name, comment.
         }
 
         private static void CompareStructs(CppContainerList<CppClass> structsv3, CppContainerList<CppClass> structsv4)
@@ -225,9 +259,9 @@ namespace divlc
                 WriteLine($"{structName} {nameof(fields1)} count is {fields2.Count} in libvlc 4");
             }
 
-            foreach(var item in fields1.Where(f1 => !fields2.Any(f2 => f2.Name == f1.Name)))
+            foreach(var field in fields1.Where(f1 => !fields2.Any(f2 => f2.Name == f1.Name)))
             {
-                WriteLine($"item {item.Name} is missing from v2");
+                WriteLine($"field {field.Name} is missing from v2");
                 // item missing in v2
             }
 
@@ -239,10 +273,10 @@ namespace divlc
                 CompareEventsUnion(union1, union2);
             }
 
-            foreach (var item in fields2.Where(f2 => !fields1.Any(f1 => f1.Name == f2.Name)))
+            foreach (var field in fields2.Where(f2 => !fields1.Any(f1 => f1.Name == f2.Name)))
             {
                 // item missing in v1
-                WriteLine($"item {item.Name} is missing from v1");
+                WriteLine($"field {field.Name} is missing from v1");
             }
 
             //fields1.Where(s => s.Name)
